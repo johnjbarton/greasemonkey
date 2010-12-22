@@ -257,7 +257,7 @@ GM_GreasemonkeyService.prototype = {
     var unsafeContentWin = wrappedContentWin.wrappedJSObject;
 
     // detect and grab reference to firebug console and context, if it exists
-    var firebugConsole = this.getFirebugConsole(unsafeContentWin, chromeWin);
+    var firebugConsole = this.getFirebugConsole(wrappedContentWin, chromeWin);
 
     for (var i = 0; script = scripts[i]; i++) {
       sandbox = new Components.utils.Sandbox(wrappedContentWin);
@@ -437,7 +437,7 @@ GM_GreasemonkeyService.prototype = {
     };
   },
 
-  getFirebugConsole: function(unsafeContentWin, chromeWin) {
+  getFirebugConsole: function(win, chromeWin) {
     // If we can't find this object, there's no chance the rest of this
     // function will work.
     if ('undefined'==typeof chromeWin.Firebug) return null;
@@ -445,9 +445,12 @@ GM_GreasemonkeyService.prototype = {
     try {
       chromeWin = chromeWin.top;
       var fbVersion = parseFloat(chromeWin.Firebug.version, 10);
+      if(fbVersion >= 1.7)
+          return chromeWin.Firebug.getConsoleByGlobal(win);
+
       var fbConsole = chromeWin.Firebug.Console;
       var fbContext = chromeWin.TabWatcher &&
-        chromeWin.TabWatcher.getContextByWindow(unsafeContentWin);
+        chromeWin.TabWatcher.getContextByWindow(win);
 
       // Firebug 1.4 will give no context, when disabled for the current site.
       // We can't run that way.
@@ -457,7 +460,7 @@ GM_GreasemonkeyService.prototype = {
 
       function findActiveContext() {
         for (var i=0; i<fbContext.activeConsoleHandlers.length; i++) {
-          if (fbContext.activeConsoleHandlers[i].window == unsafeContentWin) {
+          if (fbContext.activeConsoleHandlers[i].window == win) {
             return fbContext.activeConsoleHandlers[i];
           }
         }
@@ -467,20 +470,19 @@ GM_GreasemonkeyService.prototype = {
       if (!fbConsole.isEnabled(fbContext)) return null;
 
       if (1.2 == fbVersion) {
-        var safeWin = new XPCNativeWrapper(unsafeContentWin);
 
         if (fbContext.consoleHandler) {
           for (var i = 0; i < fbContext.consoleHandler.length; i++) {
-            if (fbContext.consoleHandler[i].window == safeWin) {
+            if (fbContext.consoleHandler[i].window == win) {
               return fbContext.consoleHandler[i].handler;
             }
           }
         }
 
-        var dummyElm = safeWin.document.createElement("div");
+        var dummyElm = win.document.createElement("div");
         dummyElm.setAttribute("id", "_firebugConsole");
-        safeWin.document.documentElement.appendChild(dummyElm);
-        chromeWin.Firebug.Console.injector.addConsoleListener(fbContext, safeWin);
+        win.document.documentElement.appendChild(dummyElm);
+        chromeWin.Firebug.Console.injector.addConsoleListener(fbContext, win);
         dummyElm.parentNode.removeChild(dummyElm);
 
         return fbContext.consoleHandler.pop().handler;
